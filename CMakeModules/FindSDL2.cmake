@@ -88,6 +88,7 @@ if(NOT ${CMAKE_FIND_PACKAGE_NAME}_FOUND)
       /Library/Frameworks
       /usr/local
       /usr
+      /usr/bin
       /sw # Fink
       /opt/local # DarwinPorts
       /opt/csw # Blastwave

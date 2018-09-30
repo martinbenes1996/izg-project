@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
 
 #include <student/buffer.h>
 #include <student/bunny.h>
@@ -33,8 +34,20 @@ struct PhongVariables {
   /// This variable contains light poistion in world-space.
   Vec3 lightPosition;
 
+  // program
+  ProgramID prog;
+  // vertex puller
+  VertexPullerID puller;
+
+  // vertex indices
+  BufferID ebo;
+  // vertex buffer object id
+  BufferID vbo;
+
 
 } phong;  ///<instance of all global variables for triangle example.
+
+size_t prog;
 
 /// \addtogroup cpu_side Úkoly v cpu části
 /// @{
@@ -48,6 +61,38 @@ void phong_onInit(int32_t width, int32_t height) {
   cpu_initMatrices(width, height);
   // init lightPosition
   init_Vec3(&phong.lightPosition, 1000.f, 1000.f, 1000.f);
+
+  // create program
+  phong.prog = prog = cpu_createProgram(phong.gpu);
+  
+  // reserve uniform
+  cpu_reserveUniform(phong.gpu, "viewMatrix", UNIFORM_MAT4);
+  cpu_reserveUniform(phong.gpu, "projectionMatrix", UNIFORM_MAT4);
+  cpu_reserveUniform(phong.gpu, "cameraPosition", UNIFORM_VEC3);
+  cpu_reserveUniform(phong.gpu, "lightPosition", UNIFORM_VEC3);
+
+  // shaders
+  cpu_attachVertexShader(phong.gpu, phong.prog, phong_vertexShader);
+  cpu_attachFragmentShader(phong.gpu, phong.prog, phong_fragmentShader);
+  cpu_setAttributeInterpolation(phong.gpu, phong.prog, 0, ATTRIB_VEC3, SMOOTH);
+  cpu_setAttributeInterpolation(phong.gpu, phong.prog, 1, ATTRIB_VEC3, SMOOTH);
+  
+  // vertex buffer object id
+  cpu_createBuffers(phong.gpu, 2, &phong.vbo);
+  cpu_bufferData(phong.gpu, phong.vbo, sizeof(bunnyVertices), bunnyVertices);
+  // vertex indices
+  cpu_createBuffers(phong.gpu, 1, &phong.ebo);
+  cpu_bufferData(phong.gpu, phong.ebo, sizeof(bunnyIndices), bunnyIndices);
+
+  // vertex pullers
+  cpu_createVertexPullers(phong.gpu, 1, &phong.puller);
+  for(unsigned long i = 0; i < 2; i++)
+  {
+    cpu_setVertexPullerHead(phong.gpu, phong.puller, i, phong.vbo, 3*i*sizeof(float), 6*sizeof(float));
+    cpu_enableVertexPullerHead(phong.gpu, phong.puller, i);
+  }
+  cpu_setIndexing(phong.gpu, phong.puller, phong.ebo, sizeof(float));
+  
 
 /// \todo Doprogramujte inicializační funkci.
 /// Zde byste měli vytvořit buffery na GPU, nahrát data do bufferů, vytvořit
@@ -104,6 +149,25 @@ void phong_onDraw(SDL_Surface* surface) {
   init_Vec4(&color, .1f, .1f, .1f, 1.f);
   // clear color buffer
   cpu_clearColor(phong.gpu, &color);
+
+  // program
+  cpu_useProgram(phong.gpu, phong.prog);
+  // vertex puller binding
+  cpu_bindVertexPuller(phong.gpu, phong.puller);
+
+  // uniform matrices and vectors
+  cpu_uniformMatrix4fv(phong.gpu, 
+                      getUniformLocation(phong.gpu, "viewMatrix"),
+                      (float*)&viewMatrix);
+  cpu_uniformMatrix4fv(phong.gpu, 
+                      getUniformLocation(phong.gpu, "projectionMatrix"),
+                      (float*)&projectionMatrix);
+  cpu_uniform3f(phong.gpu, getUniformLocation(phong.gpu, "cameraPosition"),
+                cameraPosition.data[0], cameraPosition.data[1], cameraPosition.data[2]);
+  cpu_uniform3f(phong.gpu, getUniformLocation(phong.gpu, "lightPosition"),
+                phong.lightPosition.data[0], phong.lightPosition.data[1], phong.lightPosition.data[2]);
+
+  cpu_drawTriangles(phong.gpu, 6276);
 
 /// \todo Doprogramujte kreslící funkci.
 /// Zde byste měli aktivovat shader program, aktivovat vertex puller, nahrát

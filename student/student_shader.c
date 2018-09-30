@@ -53,10 +53,34 @@ void phong_vertexShader(GPUVertexShaderOutput *const      output,
   ///  - shader_interpretUniformAsMat4()
   ///  - vs_interpretInputVertexAttributeAsVec3()
   ///  - vs_interpretOutputVertexAttributeAsVec3()
-  (void)output;
-  (void)input;
-  (void)gpu;
+
+  Uniforms gpuHandle = gpu_getUniformsHandle(gpu);
+  // projection matrix
+  Mat4 const * const projectionM = shader_interpretUniformAsMat4(gpuHandle, 
+                                        getUniformLocation(gpu, "projectionMatrix"));
+  // view matrix
+  Mat4 const * const viewM = shader_interpretUniformAsMat4(gpuHandle,
+                                        getUniformLocation(gpu, "viewMatrix"));
+  // input vector
+  Vec3 const * const norm = vs_interpretInputVertexAttributeAsVec3(gpu, input, 1);
+  Vec3 const * const pos = vs_interpretInputVertexAttributeAsVec3(gpu, input, 0);
+  
+  // transform
+  Mat4 transformationMatrix;
+  Vec4 pos_ext;
+  copy_Vec3Float_To_Vec4(&pos_ext, pos, (double)1);
+  multiply_Mat4_Mat4(&transformationMatrix, projectionM, viewM);
+  // transform to the bases
+  multiply_Mat4_Vec4(&output->gl_Position, &transformationMatrix, &pos_ext);
+
+  // output
+  init_Vec3(vs_interpretOutputVertexAttributeAsVec3(gpu,output,0),
+          pos->data[0], pos->data[1], pos->data[2]);
+  init_Vec3(vs_interpretOutputVertexAttributeAsVec3(gpu,output,1),
+          norm->data[0], norm->data[1], norm->data[2]);
 }
+
+float clamp(float v) { return (v<0.f)?0.f:((v>1.f)?1.f:v); }
 
 void phong_fragmentShader(GPUFragmentShaderOutput *const      output,
                           GPUFragmentShaderInput const *const input,
@@ -90,10 +114,61 @@ void phong_fragmentShader(GPUFragmentShaderOutput *const      output,
   /// <b>Seznam funkcí, které jistě využijete</b>:
   ///  - shader_interpretUniformAsVec3()
   ///  - fs_interpretInputAttributeAsVec3()
-  (void)output;
-  (void)input;
-  (void)gpu;
+  Uniforms gpuHandle = gpu_getUniformsHandle(gpu);
+  // projection matrix
+  Vec3 const * const cameraPosition = shader_interpretUniformAsVec3(gpuHandle, 
+                                        getUniformLocation(gpu, "cameraPosition"));
+  // view matrix
+  Vec3 const * const lightPosition = shader_interpretUniformAsVec3(gpuHandle,
+                                        getUniformLocation(gpu, "lightPosition"));
+  // input vector
+  Vec3 const * const normal = fs_interpretInputAttributeAsVec3(gpu, input, 1);
+  Vec3 const * const position = fs_interpretInputAttributeAsVec3(gpu, input, 0);
 
+  // coefficients
+  float rs = 400.f; // reflection
+  //float ns = 0.f; // specular
+  float rd = 2.f; // diffusion
+
+  // normalize
+  Vec3 normNorm; // norm
+  normalize_Vec3(&normNorm,normal);
+  Vec3 L, normL; // L
+  sub_Vec3(&L, lightPosition, position);
+  normalize_Vec3(&normL, &L);
+  Vec3 Cam, normCam; // cam
+  sub_Vec3(&Cam, cameraPosition, position);
+  normalize_Vec3(&normCam, &Cam);
+  multiply_Vec3_Float(&normCam, &normCam, -1.f);
+  Vec3 R, normR; // R
+  reflect(&R, &normCam, &normNorm);
+  normalize_Vec3(&normR, &R);
+  
+  // colors
+  Vec3 surfC;
+  Vec3 lightC;
+  init_Vec3(&surfC, 0.f, 1.f, 0.f); // green surface
+  if(normNorm.data[1] > 0) init_Vec3(&surfC, clamp((float)pow(normNorm.data[1],2)), 1.f, clamp((float)pow(normNorm.data[1],2)));
+  init_Vec3(&lightC, 1.f, 1.f, 1.f); // white light
+  
+  // characteristics
+  float Id = clamp(dot_Vec3(&normNorm,&normL)*rd);
+  float Is = clamp( (float)pow(dot_Vec3(&normL,&normCam),rs) );
+  if(dot_Vec3(&normL,&normNorm) < 0) Is = 0;
+  //float Ia = 0;
+
+  Vec3 result;
+  Vec3 tmp;
+  //multiply_Vec3_Float(&result,&surfC,Id);
+  init_Vec3(&result, clamp(surfC.data[0]*lightC.data[0]*Id), 
+                     clamp(surfC.data[1]*lightC.data[1]*Id), 
+                     clamp(surfC.data[2]*lightC.data[2]*Id));
+  multiply_Vec3_Float(&tmp,&lightC,Is);
+  add_Vec3(&result,&result,&tmp);
+
+  for(int i = 0; i < 3; i++) { output->color.data[i] = result.data[i]; }
+  output->color.data[3] = 1.f;
+  
 }
 
 /// @}

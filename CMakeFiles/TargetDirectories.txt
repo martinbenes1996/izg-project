@@ -1,0 +1,3 @@
+/home/martin/izg-project/CMakeFiles/rebuild_cache.dir
+/home/martin/izg-project/CMakeFiles/edit_cache.dir
+/home/martin/izg-project/CMakeFiles/izgProjekt2017.dir

@@ -20,6 +20,17 @@
 VertexIndex gpu_computeGLVertexID(
     VertexIndex const *const     indices,
     VertexShaderInvocation const vertexShaderInvocation) {
+
+      // aktivni indexing
+      if(indices != NULL) 
+      {
+        return indices[vertexShaderInvocation];
+      }
+      // neaktivni indexing
+      else
+      {
+        return vertexShaderInvocation;
+      }
   /// \todo Naimplementujte výpočet gl_VertexID z vertexShaderInvocation
   /// a případného indexování.
   /// vertexShaderInvocation obsahuje pořadové číslo spuštění (invokace)
@@ -38,6 +49,7 @@ VertexIndex gpu_computeGLVertexID(
 
 void const *gpu_computeVertexAttributeDataPointer(
     GPUVertexPullerHead const *const head, VertexIndex const gl_VertexID) {
+
   /// \todo Naimplementujte výpočet ukazatele pro daný vertex attribut a číslo
   /// vrcholu.
   /// Tato funkce počíta přesný ukazatel na data vertex atributu.
@@ -46,6 +58,8 @@ void const *gpu_computeVertexAttributeDataPointer(
   /// Správná adresa se odvíjí od adresy bufferu, offsetu čtěcí hlavy, čísla
   /// vrcholu a kroku čtecí hlavy.
   assert(head != NULL);
+  return (void const *)((unsigned long)gl_VertexID*head->stride + head->offset + (unsigned long)head->buffer);
+
   (void)head;
   (void)gl_VertexID;
   return NULL;
@@ -66,6 +80,23 @@ void gpu_runVertexPuller(GPUVertexPullerOutput *const              output,
   ///  - gpu_computeVertexAttributeDataPointer()
   assert(output != NULL);
   assert(puller != NULL);
+
+  for(unsigned long it = 0; it < MAX_ATTRIBUTES; it++)
+  {
+    if(puller->heads[it].enabled)
+    {
+      output->attributes[it] = gpu_computeVertexAttributeDataPointer(
+                                              &puller->heads[it],
+                                              gpu_computeGLVertexID(puller->indices, 
+                                                              vertexShaderInvocation)
+                              );
+    }
+    else
+    {
+      output->attributes[it] = NULL;
+    }
+  }
+
   (void)output;
   (void)puller;
   (void)vertexShaderInvocation;
@@ -105,6 +136,18 @@ void gpu_runPrimitiveAssembly(
 /// <b>Seznam struktur, které jistě využijete:</b>
 ///  - GPUVertexPullerOutput()
 ///  - GPUVertexShaderInput()
+
+  primitive->nofUsedVertices = nofPrimitiveVertices;
+  for(unsigned long it = 0; it < nofPrimitiveVertices; it++)
+  {
+    GPUVertexShaderInput i;
+    GPUVertexPullerOutput o;
+    gpu_runVertexPuller(&o, puller, baseVertexShaderInvocation+it);
+    i.gl_VertexID = gpu_computeGLVertexID(puller->indices, baseVertexShaderInvocation+it);
+    i.attributes = &o;
+    vertexShader(&primitive->vertices[it], &i, gpu);
+  }
+  
 }
 
 /// @}
